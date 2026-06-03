@@ -1,0 +1,1 @@
+TODO: find a way to make this intro smaller without increasing color banding; it looks tacky.
