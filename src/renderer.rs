@@ -378,8 +378,13 @@ impl IntroRendererState {
         view: &wgpu::TextureView,
         surface_size: PhysicalSize<u32>,
     ) -> Result<bool, String> {
+        if !self.player.is_started() {
+            self.player.start().map_err(|e| e.to_string())?;
+        }
+            
         if self.player.is_finished() {
             self.player.stop_audio();
+            
             return Ok(false);
         }
 
