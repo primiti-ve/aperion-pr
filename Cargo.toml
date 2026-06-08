@@ -16,3 +16,12 @@ qoi = "0.4"
 thiserror = "2.0"
 rayon = "1.12"
 mimalloc = "0.1"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = "z"
+strip = "symbols"
+
+[profile.dev]
+debug = false
