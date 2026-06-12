@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use qoi::{Channels, Decoder as QoiDecoder};
+use rayon::prelude::*;
 use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player};
+use thiserror::Error;
 
 use crate::logging::{LogOptions, log_as};
 
@@ -15,7 +17,8 @@ const INTRO_FPS: f64 = 30.0; // plan to make this variable across different intr
 pub struct IntroPlayer {
     frames: Vec<IntroFrame>,
     frame_duration: Duration,
-    started_at: Instant,
+    started_at: Option<Instant>,
+    pending_audio: Option<Vec<u8>>,
     _audio_sink: Option<MixerDeviceSink>,
     audio_player: Option<Player>,
 }
@@ -32,6 +35,7 @@ impl IntroPlayer {
         let started = Instant::now();
 
         log(&format!("decoding \"{}\"", frames_dir.display()));
+
         let frames = decode_qoi_frames_from_dir(&frames_dir)?;
         let audio = read_optional_audio(&audio_path)?;
 
@@ -46,15 +50,29 @@ impl IntroPlayer {
             started.elapsed()
         ));
 
-        let (audio_stream, audio_sink) = start_audio(audio)?;
-
         Ok(Self {
             frames,
             frame_duration: Duration::from_secs_f64(1.0 / INTRO_FPS),
-            started_at: Instant::now(),
-            _audio_sink: audio_stream,
-            audio_player: audio_sink,
+            started_at: None,
+            pending_audio: audio,
+            _audio_sink: None,
+            audio_player: None,
         })
+    }
+
+    /// start playing the intro audio
+    pub fn start(&mut self) -> Result<(), IntroError> {
+        let (sink, player) = start_audio(self.pending_audio.take())?;
+
+        self._audio_sink = sink;
+        self.audio_player = player;
+        self.started_at = Some(Instant::now());
+
+        Ok(())
+    }
+
+    pub fn is_started(&self) -> bool {
+        self.started_at.is_some()
     }
 
     /// loads intro data by a specific path
@@ -87,8 +105,13 @@ impl IntroPlayer {
     }
 
     pub fn is_finished(&self) -> bool {
+        let Some(started_at) = self.started_at else {
+            return false;
+        };
+
         let total_duration = self.frame_duration.mul_f64(self.frames.len() as f64);
-        self.started_at.elapsed() >= total_duration
+
+        started_at.elapsed() >= total_duration
     }
 
     pub fn stop_audio(&self) {
@@ -98,12 +121,15 @@ impl IntroPlayer {
     }
 
     fn current_frame_index(&self) -> Option<usize> {
+        let started_at = self.started_at?;
+
         if self.frames.is_empty() {
             return None;
         }
 
-        let elapsed = self.started_at.elapsed();
+        let elapsed = started_at.elapsed();
         let frame_index = (elapsed.as_secs_f64() / self.frame_duration.as_secs_f64()) as usize;
+
         (frame_index < self.frames.len()).then_some(frame_index)
     }
 }
@@ -115,63 +141,28 @@ pub struct IntroFrame {
     pub rgba: Vec<u8>,
 }
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum IntroError {
-    Io(io::Error),
+    #[error("{0}")]
+    Io(#[from] io::Error),
+
+    #[error("{0}")]
     ImageDecode(String),
+
+    #[error("{0}")]
     AudioPlayback(String),
+
+    #[error("invalid intro asset name from path: {0}")]
     InvalidAssetName(PathBuf),
+
+    #[error("intro asset directory does not exist: {0}")]
     MissingIntroRoot(PathBuf),
+
+    #[error("intro frames directory does not exist: {0}")]
     MissingFramesDir(PathBuf),
+
+    #[error("no intro frames were decoded")]
     NoFramesDecoded,
-}
-
-impl fmt::Display for IntroError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io(err) => write!(f, "{err}"),
-            Self::ImageDecode(message) => write!(f, "{message}"),
-            Self::AudioPlayback(message) => write!(f, "{message}"),
-            Self::InvalidAssetName(path) => {
-                write!(f, "invalid intro asset name from path: {}", path.display())
-            }
-            Self::MissingIntroRoot(path) => {
-                write!(
-                    f,
-                    "intro asset directory does not exist: {}",
-                    path.display()
-                )
-            }
-            Self::MissingFramesDir(path) => {
-                write!(
-                    f,
-                    "intro frames directory does not exist: {}",
-                    path.display()
-                )
-            }
-            Self::NoFramesDecoded => write!(f, "no intro frames were decoded"),
-        }
-    }
-}
-
-impl Error for IntroError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Io(err) => Some(err),
-            Self::ImageDecode(_)
-            | Self::AudioPlayback(_)
-            | Self::InvalidAssetName(_)
-            | Self::MissingIntroRoot(_)
-            | Self::MissingFramesDir(_)
-            | Self::NoFramesDecoded => None,
-        }
-    }
-}
-
-impl From<io::Error> for IntroError {
-    fn from(value: io::Error) -> Self {
-        Self::Io(value)
-    }
 }
 
 fn resolve_intro_asset_path(asset_name: &str) -> Result<PathBuf, IntroError> {
@@ -195,6 +186,9 @@ fn resolve_intro_asset_path(asset_name: &str) -> Result<PathBuf, IntroError> {
     Err(IntroError::MissingIntroRoot(from_cwd))
 }
 
+// note(prim): would it be worth it to have a cache of sorts??
+//             it would reduce load times down to a simple fs call or two,
+//             but idk how it would work rn...
 fn decode_qoi_frames_from_dir(frames_dir: &Path) -> Result<Vec<IntroFrame>, IntroError> {
     let log = log_as(Some("INTROPLAYER"), LogOptions::default());
 
@@ -214,13 +208,10 @@ fn decode_qoi_frames_from_dir(frames_dir: &Path) -> Result<Vec<IntroFrame>, Intr
 
     frame_paths.sort();
 
-    let mut frames = Vec::with_capacity(frame_paths.len());
-
-    for frame_path in frame_paths {
-        frames.push(decode_qoi_frame(&frame_path)?);
-    }
-
-    Ok(frames)
+    frame_paths
+        .par_iter()
+        .map(|path| decode_qoi_frame(path))
+        .collect()
 }
 
 fn decode_qoi_frame(path: &Path) -> Result<IntroFrame, IntroError> {

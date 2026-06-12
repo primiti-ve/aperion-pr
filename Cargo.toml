@@ -10,6 +10,18 @@ wgpu = "0.20"
 pollster = "0.3"
 rodio = "0.22"
 bytemuck = "1.25"
-image = "0.25.10"
-jxl-oxide = { version = "0.12.6", features = ["image"] }
-qoi = "0.4.1"
+image = "0.25"
+jxl-oxide = { version = "0.12", features = ["image"] }
+qoi = "0.4"
+thiserror = "2.0"
+rayon = "1.12"
+mimalloc = "0.1"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = "z"
+strip = "symbols"
+
+[profile.dev]
+debug = false

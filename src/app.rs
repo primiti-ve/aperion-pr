@@ -17,10 +17,18 @@ pub struct App {
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let log_verbose = log_as(Some("APP"), LogOptions { verbose_only: true });
+
+        // note(prim): why was it fullscreen AND invisible by default??
+        // let attribs = WindowAttributes::default()
+        //     .with_title(window::WINDOW_TITLE)
+        //     .with_visible(false)
+        //     .with_fullscreen(Some(Fullscreen::Borderless(None)));
+
         let attribs = WindowAttributes::default()
             .with_title(window::WINDOW_TITLE)
-            .with_visible(false)
-            .with_fullscreen(Some(Fullscreen::Borderless(None)));
+            .with_visible(true)
+            .with_maximized(true);
+        
         let window = Arc::new(event_loop.create_window(attribs).unwrap());
         let mut renderer = pollster::block_on(Renderer::new(window.clone()));
 

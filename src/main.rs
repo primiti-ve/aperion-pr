@@ -1,4 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![allow(unused)]
 
 mod app;
 mod info;
@@ -9,7 +10,12 @@ mod window;
 
 use app::App;
 use logging::{LogOptions, log_as, set_verbose_logging};
+
+use mimalloc::MiMalloc;
 use winit::event_loop::EventLoop;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 /// hello aperion
 fn main() {
