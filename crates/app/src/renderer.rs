@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
-use crate::intro::IntroPlayer;
-use crate::logging::{LogOptions, log_as};
+use aperion_logger::{LogOptions, log_as};
+
 use crate::window;
+use crate::intro::IntroPlayer;
+
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 

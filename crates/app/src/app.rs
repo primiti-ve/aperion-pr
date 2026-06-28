@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
-use crate::logging::{LogOptions, log_as};
+use aperion_logger::{LogOptions, log_as};
+
 use crate::renderer::Renderer;
 use crate::window;
+
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
-use winit::window::{Fullscreen, Window, WindowAttributes, WindowId};
+use winit::window::{Window, WindowAttributes, WindowId};
 
 #[derive(Default)]
 pub struct App {
@@ -38,6 +40,7 @@ impl ApplicationHandler for App {
         window.request_redraw();
 
         log_verbose("window & renderer created");
+
         self.renderer = Some(renderer);
         self.window = Some(window);
     }

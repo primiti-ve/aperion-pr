@@ -1,0 +1,19 @@
+[package]
+name = "aperion_app"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+# external
+winit = { workspace = true }
+wgpu = { workspace = true }
+pollster = { workspace = true }
+rodio = { workspace = true }
+bytemuck = { workspace = true }
+qoi = { workspace = true }
+thiserror = { workspace = true }
+rayon = { workspace = true }
+
+# internal
+aperion_logger = { workspace = true }

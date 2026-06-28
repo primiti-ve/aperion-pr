@@ -1,18 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(unused)]
 
-mod app;
-mod info;
-mod intro;
-mod logging;
-mod renderer;
-mod window;
-
-use app::App;
-use logging::{LogOptions, log_as, set_verbose_logging};
+use aperion_app::App;
+use aperion_logger::{LogOptions, log_as, set_verbose_logging};
 
 use mimalloc::MiMalloc;
-use winit::event_loop::EventLoop;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -24,18 +16,16 @@ fn main() {
     let log = log_as(Some("MAIN"), LogOptions::default());
     let log_noname = log_as(None, LogOptions::default());
 
-    log_noname(info::ENGINE_LOGO);
+    log_noname(aperion_shared::ENGINE_LOGO);
     log_noname(&format!(
         "{} v{}",
-        info::ENGINE_NAME,
+        aperion_shared::ENGINE_NAME,
         env!("CARGO_PKG_VERSION")
     ));
-    log_noname(info::ENGINE_START_TEXT1);
-    log_noname(info::ENGINE_START_TEXT2);
+    log_noname(aperion_shared::ENGINE_START_TEXT1);
+    log_noname(aperion_shared::ENGINE_START_TEXT2);
 
     log("starting app");
 
-    let event_loop = EventLoop::new().unwrap();
-    let mut app = App::default();
-    event_loop.run_app(&mut app).unwrap();
+    aperion_app::init();
 }

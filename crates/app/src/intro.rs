@@ -1,5 +1,3 @@
-use std::error::Error;
-use std::fmt;
 use std::fs;
 use std::io::{self, Cursor};
 use std::path::{Path, PathBuf};
@@ -10,7 +8,7 @@ use rayon::prelude::*;
 use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player};
 use thiserror::Error;
 
-use crate::logging::{LogOptions, log_as};
+use aperion_logger::{LogOptions, log_as};
 
 const INTRO_FPS: f64 = 30.0; // plan to make this variable across different intros if needed via a manifest.json impl in the asset folder
 
