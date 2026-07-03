@@ -2,22 +2,14 @@
 #![allow(unused)]
 
 mod adf;
-mod app;
-mod info;
-mod intro;
-mod logging;
-mod renderer;
-mod window;
 
-use app::App;
-use logging::{LogOptions, log_as, set_verbose_logging};
+use aperion_logger::{LogOptions, log_as, set_verbose_logging};
 
 use mimalloc::MiMalloc;
 use std::fs;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
-use winit::event_loop::EventLoop;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -42,14 +34,14 @@ fn main() -> ExitCode {
     let log = log_as(Some("MAIN"), LogOptions::default());
     let log_noname = log_as(None, LogOptions::default());
 
-    log_noname(info::ENGINE_LOGO);
+    log_noname(aperion_shared::ENGINE_LOGO);
     log_noname(&format!(
         "{} v{}",
-        info::ENGINE_NAME,
+        aperion_shared::ENGINE_NAME,
         env!("CARGO_PKG_VERSION")
     ));
-    log_noname(info::ENGINE_START_TEXT1);
-    log_noname(info::ENGINE_START_TEXT2);
+    log_noname(aperion_shared::ENGINE_START_TEXT1);
+    log_noname(aperion_shared::ENGINE_START_TEXT2);
 
     match cli_command {
         CliCommand::RunApp => {}
@@ -66,10 +58,7 @@ fn main() -> ExitCode {
 
     log("starting app");
 
-    let event_loop = EventLoop::new().unwrap();
-    let mut app = App::default();
-    event_loop.run_app(&mut app).unwrap();
-
+    aperion_app::init();
     ExitCode::SUCCESS
 }
 
@@ -110,7 +99,7 @@ fn parse_cli_args() -> Result<CliCommand, String> {
 
             if args.next().is_some() {
                 return Err(
-                    "unexpected extra arguments after --makeadfb <input> <output>".to_string()
+                    "unexpected extra arguments after --makeadfb <input> <output>".to_string(),
                 );
             }
 
@@ -152,16 +141,11 @@ fn run_check_adf(path: &PathBuf) -> ExitCode {
     match adf::check_bytes(&bytes) {
         Ok((encoding, summary)) => {
             let parse_elapsed = started_at.elapsed();
-            println!(
-                "ADF parsed successfully from {}",
-                path.display()
-            );
+            println!("ADF parsed successfully from {}", path.display());
             println!("encoding: {}", encoding);
             println!(
                 "version: {}, material imports: {}, edits: {}",
-                summary.version,
-                summary.material_imports,
-                summary.edits
+                summary.version, summary.material_imports, summary.edits
             );
             println!("parse time: {:?}", parse_elapsed);
             ExitCode::SUCCESS
@@ -208,16 +192,12 @@ fn run_make_adfb(input: &PathBuf, output: &PathBuf) -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    println!(
-        "wrote ADFB to {} from {}",
-        output.display(),
-        input.display()
-    );
+    println!("wrote ADFB to {} from {}", output.display(), input.display());
     ExitCode::SUCCESS
 }
 
-fn run_view_adf(path: &PathBuf) -> ExitCode {
-    return ExitCode::SUCCESS;
+fn run_view_adf(_path: &PathBuf) -> ExitCode {
+    ExitCode::SUCCESS
 }
 
 #[cfg(windows)]

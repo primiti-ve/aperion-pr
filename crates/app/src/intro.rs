@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::fs;
 use std::io::{self, Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -10,7 +9,7 @@ use std::time::{Duration, Instant};
 use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player};
 use thiserror::Error;
 
-use crate::logging::{LogOptions, log_as};
+use aperion_logger::{LogOptions, log_as};
 
 const INTRO_VIDEO_FILENAME: &str = "intro.mp4";
 const FRAME_BUFFER_CAPACITY: usize = 4;

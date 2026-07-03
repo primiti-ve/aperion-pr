@@ -1,0 +1,16 @@
+[package]
+name = "aperion"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+
+[dependencies]
+
+# external
+mimalloc = "0.1"
+thiserror = { workspace = true }
+
+# internal
+aperion_app = { workspace = true }
+aperion_shared = { workspace = true }
+aperion_logger = { workspace = true }

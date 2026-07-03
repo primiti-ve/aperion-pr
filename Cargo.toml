@@ -1,21 +1,25 @@
-[package]
-name = "aperion"
-version = "0.1.0"
-edition = "2024"
-build = "build.rs"
+[workspace]
+resolver = "3"
+members = ["crates/*"]
 
-[dependencies]
+[workspace.dependencies]
+
+# note(prim): it's way better to put stuff in this instead of individual crates
+#             it lets crates share package versions instead of possibly having conflicting versions!!
+#             however, you should only put stuff here if it's used in more than one crate
+
+# external
 winit = "0.30"
 wgpu = "0.20"
 pollster = "0.3"
 rodio = "0.22"
 bytemuck = "1.25"
-image = "0.25"
-jxl-oxide = { version = "0.12", features = ["image"] }
-qoi = "0.4"
 thiserror = "2.0"
-rayon = "1.12"
-mimalloc = "0.1"
+
+# internal
+aperion_app = { path = "crates/app", version = "0.1.0" }
+aperion_shared = { path = "crates/shared", version = "0.1.0" }
+aperion_logger = { path = "crates/logger", version = "0.1.0" }
 
 [profile.release]
 codegen-units = 1
