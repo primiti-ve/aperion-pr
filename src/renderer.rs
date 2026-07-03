@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use crate::intro::IntroPlayer;
@@ -12,6 +13,7 @@ pub struct Renderer {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     size: PhysicalSize<u32>,
+    pending_intro_paths: VecDeque<std::path::PathBuf>,
     intro: Option<IntroRendererState>,
 }
 
@@ -89,34 +91,18 @@ impl Renderer {
         surface.configure(&device, &config);
         log_verbose("surface configured");
 
-        let intro = match window::intro_asset_path() {
-            Some(path) if path.exists() => {
-                match IntroRendererState::new(&device, &queue, surface_format, &path) {
-                    Ok(state) => Some(state),
-                    Err(err) => {
-                        log(&format!("intro load failed: {err}"));
-                        None
-                    }
-                }
-            }
-            Some(path) => {
-                log_verbose(&format!("intro asset not found at {}", path.display()));
-                None
-            }
-            None => {
-                log_verbose("intro playback disabled by window config");
-                None
-            }
-        };
-
-        Self {
+        let mut renderer = Self {
             surface,
             device,
             queue,
             config,
             size,
-            intro,
-        }
+            pending_intro_paths: VecDeque::from(window::intro_asset_paths()),
+            intro: None,
+        };
+
+        renderer.try_start_next_intro(surface_format);
+        renderer
     }
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
@@ -155,23 +141,41 @@ impl Renderer {
                 label: Some("render encoder"),
             });
 
-        let played_intro = if let Some(intro) = self.intro.as_mut() {
-            match intro.render(&self.queue, &mut encoder, &view, self.size) {
-                Ok(true) => true,
+        let mut played_intro = false;
+
+        loop {
+            if self.intro.is_none() {
+                self.try_start_next_intro(self.config.format);
+
+                if self.intro.is_none() {
+                    break;
+                }
+            }
+
+            let intro_result = {
+                let intro = self
+                    .intro
+                    .as_mut()
+                    .expect("intro should exist after startup attempt");
+
+                intro.render(&self.queue, &mut encoder, &view, self.size)
+            };
+
+            match intro_result {
+                Ok(true) => {
+                    played_intro = true;
+                    break;
+                }
                 Ok(false) => {
                     self.intro = None;
-                    false
                 }
                 Err(err) => {
                     let log = log_as(Some("RENDERER"), LogOptions::default());
                     log(&format!("intro render failed: {err}"));
                     self.intro = None;
-                    false
                 }
             }
-        } else {
-            false
-        };
+        }
 
         if !played_intro {
             let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -200,6 +204,33 @@ impl Renderer {
 
         Ok(())
     }
+
+    fn try_start_next_intro(&mut self, surface_format: wgpu::TextureFormat) {
+        let log = log_as(Some("RENDERER"), LogOptions::default());
+        let log_verbose = log_as(Some("RENDERER"), LogOptions { verbose_only: true });
+
+        while self.intro.is_none() {
+            let Some(path) = self.pending_intro_paths.pop_front() else {
+                log_verbose("intro queue exhausted");
+                return;
+            };
+
+            if !path.exists() {
+                log_verbose(&format!("intro asset not found at {}", path.display()));
+                continue;
+            }
+
+            match IntroRendererState::new(&self.device, &self.queue, surface_format, &path) {
+                Ok(state) => {
+                    self.intro = Some(state);
+                    return;
+                }
+                Err(err) => {
+                    log(&format!("intro load failed for {}: {err}", path.display()));
+                }
+            }
+        }
+    }
 }
 
 struct IntroRendererState {
@@ -218,17 +249,18 @@ impl IntroRendererState {
         surface_format: wgpu::TextureFormat,
         intro_path: &std::path::Path,
     ) -> Result<Self, String> {
-        let player = IntroPlayer::load_from_path(intro_path).map_err(|err| err.to_string())?;
+        let mut player = IntroPlayer::load_from_path(intro_path).map_err(|err| err.to_string())?;
         let first_frame = player
             .first_frame()
             .cloned()
             .ok_or_else(|| "intro contained no frames".to_string())?;
+        player.start().map_err(|err| err.to_string())?;
 
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("intro texture"),
             size: wgpu::Extent3d {
-                width: first_frame.width,
-                height: first_frame.height,
+                width: player.width(),
+                height: player.height(),
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -253,8 +285,8 @@ impl IntroRendererState {
                 rows_per_image: Some(first_frame.height),
             },
             wgpu::Extent3d {
-                width: first_frame.width,
-                height: first_frame.height,
+                width: player.width(),
+                height: player.height(),
                 depth_or_array_layers: 1,
             },
         );
@@ -378,17 +410,12 @@ impl IntroRendererState {
         view: &wgpu::TextureView,
         surface_size: PhysicalSize<u32>,
     ) -> Result<bool, String> {
-        if !self.player.is_started() {
-            self.player.start().map_err(|e| e.to_string())?;
-        }
-            
         if self.player.is_finished() {
             self.player.stop_audio();
-            
             return Ok(false);
         }
 
-        let Some((frame_index, frame)) = self.player.frame_to_present() else {
+        let Some((frame_index, frame)) = self.player.frame_to_present().map_err(|err| err.to_string())? else {
             return Ok(false);
         };
 

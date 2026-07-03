@@ -12,29 +12,42 @@ use winit::window::{Fullscreen, Window, WindowAttributes, WindowId};
 pub struct App {
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
+    window_shown: bool,
 }
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        let log = log_as(Some("APP"), LogOptions::default());
         let log_verbose = log_as(Some("APP"), LogOptions { verbose_only: true });
-
-        // note(prim): why was it fullscreen AND invisible by default??
-        // let attribs = WindowAttributes::default()
-        //     .with_title(window::WINDOW_TITLE)
-        //     .with_visible(false)
-        //     .with_fullscreen(Some(Fullscreen::Borderless(None)));
 
         let attribs = WindowAttributes::default()
             .with_title(window::WINDOW_TITLE)
-            .with_visible(true)
-            .with_maximized(true);
-        
+            .with_visible(false)
+            .with_fullscreen(Some(Fullscreen::Borderless(None)));
+
         let window = Arc::new(event_loop.create_window(attribs).unwrap());
         let mut renderer = pollster::block_on(Renderer::new(window.clone()));
 
         renderer.resize(window.inner_size());
+        self.window_shown = false;
 
-        window.set_visible(true);
+        match renderer.render() {
+            Ok(()) => {
+                window.set_visible(true);
+                self.window_shown = true;
+            }
+            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                renderer.resize(window.inner_size());
+            }
+            Err(wgpu::SurfaceError::OutOfMemory) => {
+                log("startup render ran out of memory");
+                event_loop.exit();
+            }
+            Err(wgpu::SurfaceError::Timeout) => {
+                log("startup render timed out");
+            }
+        }
+
         window.request_redraw();
 
         log_verbose("window & renderer created");
@@ -70,7 +83,12 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => {
                 if let Some(renderer) = self.renderer.as_mut() {
                     match renderer.render() {
-                        Ok(()) => {}
+                        Ok(()) => {
+                            if !self.window_shown {
+                                window.set_visible(true);
+                                self.window_shown = true;
+                            }
+                        }
                         Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
                             renderer.resize(window.inner_size());
                         }

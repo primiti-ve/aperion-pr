@@ -2,26 +2,29 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 pub const WINDOW_TITLE: &str = "Aperion";
-pub const APERION: Option<&str> = Some("aperion");
+pub const INTRO_ASSETS: &[&str] = &["aperion", "formless"];
 
-pub fn intro_asset_name() -> Option<&'static str> {
-    APERION
-}
+pub fn intro_asset_paths() -> Vec<PathBuf> {
+    INTRO_ASSETS
+        .iter()
+        .map(|asset_name| {
+            let relative = Path::new("assets").join("intros").join(asset_name);
 
-/// resolve intro asset paths
-pub fn intro_asset_path() -> Option<PathBuf> {
-    let asset_name = APERION?;
+            if let Ok(cwd) = env::current_dir() {
+                let from_cwd = cwd.join(&relative);
 
-    let relative = Path::new("assets").join("intros").join(asset_name);
+                if from_cwd.exists() {
+                    return from_cwd;
+                }
+            }
 
-    if let Ok(cwd) = env::current_dir() {
-        let from_cwd = cwd.join(&relative);
+            let exe_dir = env::current_exe()
+                .ok()
+                .and_then(|path| path.parent().map(Path::to_path_buf));
 
-        if from_cwd.exists() {
-            return Some(from_cwd);
-        }
-    }
-
-    let exe_dir = env::current_exe().ok()?.parent()?.to_path_buf();
-    Some(exe_dir.join(relative))
+            exe_dir
+                .map(|dir| dir.join(&relative))
+                .unwrap_or_else(|| PathBuf::from(&relative))
+        })
+        .collect()
 }
